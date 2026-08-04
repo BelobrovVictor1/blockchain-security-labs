@@ -1,0 +1,23 @@
+Jul-16-2026 05:48:12 
+The attackers created a nearly empty TUNA/USDC Fusion pool.
+They set its initial price close to the legitimate oracle price, so DeFiTuna’s pre-swap price-deviation checks passed.
+Then placed two attacker-controlled limit-order positions in that pool at abnormally high tick 208,640, adding 0.000526 + 0.000526 = 0.001052 TUNA.
+Call DefiTuna: Open_and_increase_tuna_spot_position_jupiter
+Decoding the Instruction Data referencing tuna.json get That the attacker opened the opened a DeFiTuna spot position with zero collateral The 570K USDC borrowed from lending pool minus fee were routed through Embedded Jupiter Router, and the 47 bytes instruction specified the swap path.
+The path is to swap 569,601 USDC, which is all USDC borrowed minus the fees, for TUNA through the prepared thin pool
+The exact swap is at tick 208640 as they are the only non-empty ones, considering 0.1% fee, the output amount is 569601/(1.0001)^208640*(1-0.001) = 0.000494845, rounded down to 0.000494 TUNA.
+After receiving those 494 raw units, DeFiTuna valued the position at its pre-swap/oracle price 0.001837534 in is_healthy() -> compute_total_and_debt() (tuna_position.rs).
+At line51, 494 × 0.0018375338 = 0.9077417.
+
+At line 53, to_num:() converts the positive fixed-point value to an integer by discarding the fractional part, so the result is zero.
+Then the zero ‘total’ was evaluated under the assumption that “the leverage of an empty position is always 1.0x.” and the position is considered healthy.
+
+The USDC now belonged economically to the two malicious limit-order positions. So each attacker called DecreaseLimitOrder to withdraw 284,280.483231 USDC each.
+
+Vulnerability
+In TunaPosition.ishealthy() solvency check, the zero ‘total’ value was evaluated under the assumption that “the leverage of an empty position is always 1.0x.” and the position is considered healthy.
+The self.compute_total_and_debt() uses a reference sqrt_price and round down the result in its calculation at line 53.
+The attacker engineered a very skewed pool that after routing USDC assets to the pool through an arbitrary swap path, the returning asset value is so small that the rounding in to_num::() reduced the total to zero, effectively bypassing the solvency check.
+
+Fund Flow
+From 7hiHL8AgDuLNVDQLfN3GHdLAEeCN1F7uz6nSANRvFJst and BK9aTnKfPNnnj45Me5ACrky2vexzUrZHRzr4BjmQpH3c funds were bridged from Solana to Ethereum network via Mayan. On Ethereum, 140 ETH was deposited into Railgun, while 291,696 DAI and 5 ETH remains in wallet 0x509B9D094A6C26D716aaC131E8aDee5B16B86d3e as of 20 July.
